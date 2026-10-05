@@ -4,59 +4,59 @@
 
 > Kỳ vọng và thang điểm: `SUBMISSION.md`. Mọi số liệu phải khớp với `ket_qua_benchmark_kg.txt`. Bản thiết kế ontology nộp riêng ở `report/ONTOLOGY.md`.
 
-Cấu hình (dòng đầu file kết quả): `openai:gpt-4o-mini`, `text-embedding-3-small`, top_k=3, chunk_size=800, 176 chunk, **KG: 207 nodes / 383 rels**.
+Cấu hình (dòng đầu file kết quả): `openai:gpt-4o-mini`, `text-embedding-3-small`, top_k=3, chunk_size=800, 176 chunk, **KG: 319 nodes / 549 rels**. Graph dựng theo **ontology tự thiết kế** (`report/ONTOLOGY.md`, có `Threshold`). Kết quả của ontology gợi ý để so sánh: `ket_qua_benchmark_kg.hint.txt`.
 
 ## 1. Chi phí (10 điểm)
 
 ```
 == Indexing (one-off)
 pipeline  calls    in_tok  out_tok       USD  seconds
-flat        176     56072        0   0.00112     43.6
-graph       196     93318     4846   0.00962    102.9
+flat        176     56072        0   0.00112     40.9
+graph       196     93318     4825   0.00960    100.6
 
 == Querying (mean per question)
 pipeline  recall  judge   in_tok  out_tok       USD  seconds
-flat        0.43   1.17      694       47   0.00013     1.32
-graph       0.94   1.83     6783       82   0.00106     2.15
+flat        0.43   1.00      694       47   0.00013     1.34
+graph       1.00   2.00     5898      108   0.00094     2.39
 ```
 
 | Chỉ số | Flat | Graph | Graph / Flat |
 | --- | --- | --- | --- |
-| Indexing USD | 0.00112 | 0.00962 | ×8.6 |
-| Indexing giây | 43.6 | 102.9 | ×2.4 |
-| Mỗi câu: USD | 0.00013 | 0.00106 | ×8.2 |
-| Mỗi câu: giây | 1.32 | 2.15 | ×1.6 |
-| Mỗi câu: in_tok | 694 | 6783 | ×9.8 |
+| Indexing USD | 0.00112 | 0.00960 | ×8.6 |
+| Indexing giây | 40.9 | 100.6 | ×2.5 |
+| Mỗi câu: USD | 0.00013 | 0.00094 | ×7.2 |
+| Mỗi câu: giây | 1.34 | 2.39 | ×1.8 |
+| Mỗi câu: in_tok | 694 | 5898 | ×8.5 |
 
 **Chi phí tăng thêm đến từ đâu?**
-> **Indexing:** graph gọi 196 lần, tức 176 lần embed chunk như Flat cộng 20 lần LLM trích vụ việc, mỗi bài báo một lần (luật parse bằng regex nên không tốn LLM). 20 lần này thêm 37 246 token đầu vào (93 318 − 56 072) và 4 846 token đầu ra, khoảng $0.0085, và chiếm phần lớn thời gian chênh (+59 giây).
-> **Querying:** số lần gọi LLM vẫn như Flat (1 lần mỗi câu), nhưng prompt dài gấp ~9.8 lần vì `context()` đưa toàn bộ văn bản các khoản luật (mỗi khoản 1–2 nghìn ký tự) vào GRAPH_PROMPT, không chỉ cạnh. Câu Q6 chạm trần `max_facts=60`, phần lớn là text khoản luật (xem E5). Đầu ra cũng dài hơn (82 so với 47 token) vì có trích Điều/khoản.
+> **Indexing:** 196 lần gọi = 176 lần embed chunk như Flat + **20 lần LLM trích xuất** (1 lần / bài báo). Luật, kể cả 117 node `Threshold`, được parse bằng regex nên không tốn LLM. 20 lần trích xuất thêm 37 246 token vào (93 318 − 56 072) và 4 825 token ra ≈ $0.0085, cùng ~60 giây.
+> **Querying:** vẫn 1 lần gọi LLM / câu như Flat, nhưng prompt dài ×8.5 vì `context()` đưa **văn bản khoản luật** (1–2 nghìn ký tự / khoản) và danh sách vụ vào prompt. Output dài hơn (108 vs 47 token) vì có trích Điều/khoản và Q6 liệt kê 5 vụ.
+> So với ontology gợi ý (`.hint.txt`), in_tok / câu giảm 6783 → 5898 (−13%) và USD / câu 0.00106 → 0.00094, vì nay chỉ đưa **khoản áp dụng theo lượng** chứ không đưa mọi khoản nhắc tới chất.
 >
-> **Hòa vốn:** tính theo USD thì graph không bao giờ hòa vốn, vì mỗi câu đắt hơn $0.00093 và indexing đắt hơn $0.0085. Tính theo chi phí cho mỗi điểm judge: Flat $0.00013/1.17 ≈ $0.00011, Graph $0.00106/1.83 ≈ $0.00058. Với 1 000 câu, graph tốn thêm khoảng $0.93 + $0.0085 ≈ **$0.94**. Đổi lại, recall trung bình tăng từ 0.43 lên 0.94, và ở các câu cross-kb (Q3, Q4) Flat chỉ trả lời "Không đủ thông tin". Nếu một câu sai tốn hơn ~$0.002 công sửa của người, graph đã có lời.
+> **Hòa vốn:** theo USD thuần, graph không bao giờ hòa vốn (mỗi câu đắt thêm $0.00081, indexing đắt thêm $0.0085). Với 1 000 câu, graph tốn thêm ≈ **$0.82**. Theo chi phí / điểm judge: Flat $0.00013 / 1.00 = $0.00013, Graph $0.00094 / 2.00 = $0.00047. Đổi lại, recall tăng 0.43 → 1.00, và 3/6 câu Flat trả lời sai hoặc "Không đủ thông tin". Nếu mỗi câu sai tốn hơn ~$0.0015 công kiểm tra của người, graph có lời.
 
 ## 2. Từng câu hỏi (10 điểm)
 
 | Câu | Loại | Flat recall / judge | Graph recall / judge | Thắng | Vì sao (1 câu) |
 | --- | --- | --- | --- | --- | --- |
-| Q1 | single-hop-law | 1.00 / 2 | 1.00 / 2 | Hòa (Flat rẻ hơn) | Định nghĩa nằm gọn trong 1 chunk khoản 4 Điều 2 PCMT, vector search lấy trúng, graph chỉ thêm trích dẫn "khoản 4". |
-| Q2 | single-hop-news | 1.00 / 2 | 1.00 / 2 | Hòa (Flat rẻ hơn) | Tên hai bị cáo tử hình nằm cùng chunk với "36kg" trong một bài; graph còn thêm "Điều 251" mà câu hỏi không cần. |
-| Q3 | cross-kb | 0.00 / 0 | 1.00 / 2 | **Graph** | Top-3 của Flat không chứa chunk Điều 251 nên trả lời "Không đủ thông tin"; graph đi `Person→Case→Crime←Article→Clause` lấy được khung "02 năm đến 07 năm". |
-| Q4 | cross-kb | 0.00 / 0 | 1.00 / 2 | **Graph** | Câu hỏi dùng biệt danh "Hoàng Nato" và không nhắc Điều luật; graph nối Case→"tổ chức sử dụng"→Điều 255 và lấy cả khoản 4 (chung thân). |
-| Q5 | cross-kb-multi-hop | 0.60 / 2 | 1.00 / 2 | **Graph** | Flat đoán đúng khung phạt nhưng không nêu "Điều 250", "khoản 4" (chỉ nói "khoản b"); graph có Article.id và Clause.number nên trích chính xác. |
-| Q6 | aggregation | 0.00 / 1 | 0.67 / 1 | **Graph** (cả hai chưa đủ) | Graph quét toàn bộ cạnh `INVOLVES→MDMA` nên tìm được vụ Cái Quang Huy và Lê Minh Thành; Flat chỉ thấy 3 chunk. Cả hai bỏ sót vụ Viện Pháp y tâm thần (E5). |
+| Q1 | single-hop-law | 1.00 / 2 | 1.00 / 2 | Hòa (Flat rẻ hơn ×7) | Định nghĩa nằm gọn trong 1 chunk khoản 4 Điều 2 PCMT; graph chỉ thêm trích dẫn "Điều 2, khoản 4". |
+| Q2 | single-hop-news | 1.00 / 2 | 1.00 / 2 | Hòa (Flat rẻ hơn) | Hai tên án tử hình cùng chunk với "36kg" trong một bài báo. |
+| Q3 | cross-kb | 0.00 / 0 | 1.00 / 2 | **Graph** | Top-3 của Flat không có chunk Điều 251 nên trả lời "Không đủ thông tin"; graph đi `Person→Case→Crime←Article→Clause 1` lấy được "02 năm đến 07 năm". |
+| Q4 | cross-kb | 0.00 / 0 | 1.00 / 2 | **Graph** | Câu hỏi chỉ có biệt danh; `Person.aliases` khớp "Hoàng Nato", Crime nối tới Điều 255 và nhánh "tối đa" lấy cả khoản 4 (chung thân). |
+| Q5 | cross-kb-multi-hop | 0.60 / 1 | 1.00 / 2 | **Graph** | Flat nói "khoản b", không nêu Điều; graph so `9600 g ≥ 100 g` trên node `Threshold` và đưa thẳng "Điều 250 khoản 4 điểm b" vào context. |
+| Q6 | aggregation | 0.00 / 1 | 1.00 / 2 | **Graph** | Flat chỉ thấy 3 chunk (gọi tên "Đức, Thành, Đông"); graph quét toàn bộ cạnh `INVOLVES→MDMA` và trả danh sách 5 vụ có tên người. |
 
-**Quy luật:** câu single-hop, khi đáp án nằm trong 1 chunk (Q1, Q2), thì hai bên hòa và Flat thắng về giá (rẻ hơn 8 lần). Câu cần nối hai KB (Q3–Q5) thì graph thắng tuyệt đối: recall cross-kb trung bình Flat 0.20, Graph 1.00. Câu tổng hợp (Q6) thì graph tốt hơn nhờ quét toàn graph thay vì top-k, nhưng vẫn bị giới hạn bởi bước sinh câu trả lời của LLM.
+**Quy luật:** câu single-hop có đáp án trong 1 chunk (Q1, Q2) thì hòa, và Flat thắng về giá. Câu cần nối hai KB (Q3–Q5) thì Graph thắng tuyệt đối: recall cross-kb Flat 0.20, Graph 1.00. Câu tổng hợp (Q6) thì Graph thắng nhờ quét toàn graph thay vì top-k, nhưng chỉ khi context là danh sách gọn: với ontology gợi ý, cùng câu này chỉ đạt 0.67 (lỗi E5 ở mục 3).
 
 ## 3. Phân tích lỗi (20 điểm)
 
-### Lỗi E5: LLM lệch với graph ở câu aggregation (Q6)
+### Lỗi E5: LLM lệch với graph ở câu aggregation (phát hiện trên ontology gợi ý, đã sửa)
 
-- **Hiện tượng:** graph có **4** vụ liên quan MDMA, nhưng câu trả lời GraphRAG Q6 chỉ liệt kê **3** vụ và bỏ đúng vụ "Viện Pháp y tâm thần" có trong `must_include`, nên recall = 0.67.
-- **Bằng chứng:** Cypher trả lời thẳng câu hỏi:
+- **Hiện tượng:** với ontology gợi ý, graph có đủ 4 vụ MDMA nhưng câu trả lời GraphRAG Q6 chỉ liệt kê 3 và bỏ vụ "Viện Pháp y tâm thần" (`must_include`), recall 0.67.
+- **Bằng chứng** (trên graph của ontology gợi ý, `report/evidence/graph_audit.json`):
 
 ```cypher
-MATCH (k:Case)-[r:INVOLVES]->(s:Substance {name:'MDMA'})
-RETURN k.name, k.doc_id, r.amount;
+MATCH (k:Case)-[r:INVOLVES]->(s:Substance {name:'MDMA'}) RETURN k.name, k.doc_id, r.amount;
 ```
 
 ```
@@ -66,24 +66,21 @@ Vụ góp tiền mua ma túy tại Hà Nội            news-100260918080821054 
 Vụ vận chuyển ma túy từ Đức về Việt Nam      news-100260917203001265  9.6kg
 ```
 
-Câu trả lời GraphRAG Q6 (trích `ket_qua_benchmark_kg.txt`):
-> 1. **Vụ vận chuyển ma túy từ Đức về Việt Nam** … 2. **Vụ góp tiền mua ma túy tại Hà Nội** … 3. **Vụ tổ chức sử dụng ma túy tại Sầm Sơn** … Tóm lại, ba vụ việc này đều có liên quan đến ma túy MDMA.
+Câu trả lời Graph Q6 trong `ket_qua_benchmark_kg.hint.txt`:
+> 1. Vụ vận chuyển ma túy từ Đức về Việt Nam … 2. Vụ góp tiền mua ma túy tại Hà Nội … 3. Vụ tổ chức sử dụng ma túy tại Sầm Sơn … Tóm lại, ba vụ việc trên đều có liên quan đến ma túy MDMA.
 
-In thử `graph.context(Q6, [])` thì thấy dòng `Vụ 'Vụ án tại Viện Pháp y tâm thần Trung ương' liên quan MDMA: chưa rõ lượng.` **có trong** 60 dữ kiện. Vậy retrieval đúng, LLM bỏ sót.
-Chạy lại benchmark lần 2: bản trước (recall 0.33) cũng liệt kê đúng 3 vụ đó và cũng bỏ Viện Pháp y. Riêng lượng MDMA của vụ Huy thì đổi từ "4,3kg" (lần 1) sang "hơn 9,6kg" (lần 2). Lỗi bỏ sót là **ổn định**, còn chi tiết số liệu thì **dao động**.
+`graph.context(Q6, [])` **có** dòng `Vụ 'Vụ án tại Viện Pháp y tâm thần Trung ương' liên quan MDMA: chưa rõ lượng.`, nằm lẫn trong 60 dữ kiện mà phần lớn là text khoản Điều 249–252. Chạy benchmark 2 lần cho cùng kết quả: lần nào cũng bỏ sót vụ này, chỉ lượng MDMA của vụ Huy là dao động ("4,3kg" rồi "9,6kg").
+- **Nguyên nhân (bước generation + thiết kế context):** chữ "MDMA" trong câu hỏi kéo nhánh `MENTIONS` vào, nên vài nghìn token luật không liên quan át mất dòng về vụ Viện Pháp y. Vụ này lại có `amount` rỗng và summary nói về "nhận hối lộ", nên LLM coi đó không phải vụ ma túy.
+- **Đề xuất sửa (đã làm):** câu aggregation chỉ nhận danh sách vụ đánh số từ Cypher, có người liên quan, không kèm luật, và câu mở đầu "tìm được đúng N vụ; liệt kê đủ cả N vụ". Kết quả Q6: recall 0.67 → **1.00**, judge 1 → **2** (`ket_qua_benchmark_kg.txt`).
 
-- **Nguyên nhân (bước generation + thiết kế context):** (1) 60 dữ kiện của Q6 gồm khoảng 15 dòng về vụ việc, còn lại là text dài của các khoản Điều 249–252 vì câu hỏi có chữ "MDMA" nên nhánh `MENTIONS` kéo luật vào. Dòng về Viện Pháp y bị chìm giữa hàng nghìn token text luật không liên quan. (2) Cạnh `INVOLVES` của vụ này có `amount` rỗng và summary nói về "nhận hối lộ… chạy giám định", nên LLM coi đây là vụ hối lộ chứ không phải vụ ma túy. (3) Vụ Sầm Sơn và Viện Pháp y là hai node riêng dù cùng nhóm người (Lê Văn Đông, Trần Quốc An, Nguyễn Thị Mai Anh), nên LLM có thể coi Sầm Sơn là "đại diện" và gộp mất một vụ.
-- **Đề xuất sửa:** với câu aggregation, trả về đúng kết quả Cypher dạng danh sách (`RETURN DISTINCT k.name`), **không** kèm text khoản luật, và thêm vào prompt yêu cầu "liệt kê tất cả N vụ trong danh sách". Có thể bỏ hẳn LLM, render thẳng danh sách từ Cypher. Đặt `temperature=0` để lượng chất không dao động giữa các lần chạy.
+### Lỗi E3: Trùng thực thể (Substance đã sửa, Case vẫn còn)
 
-### Lỗi E3: Trùng thực thể (Substance và Case)
-
-- **Hiện tượng:** cùng một chất hoặc cùng một sự kiện bị tách thành nhiều node, làm gãy cầu phụ Substance và phân mảnh vụ việc.
-- **Bằng chứng:**
+- **Hiện tượng:** một thứ ngoài đời bị tách thành nhiều node.
+- **Bằng chứng, Substance trên ontology gợi ý:**
 
 ```cypher
 MATCH (s:Substance) WHERE toLower(s.name) IN ['ketamine','methamphetamine']
-OPTIONAL MATCH (x)-[r]->(s)
-RETURN s.name, type(r) AS rel, labels(x)[0] AS from, count(*) AS n ORDER BY s.name;
+OPTIONAL MATCH (x)-[r]->(s) RETURN s.name, type(r), labels(x)[0], count(*);
 ```
 
 ```
@@ -91,72 +88,82 @@ Ketamine         INVOLVES  Case    2
 Methamphetamine  INVOLVES  Case    1
 Methamphetamine  MENTIONS  Clause  18
 ketamine         INVOLVES  Case    2
-methamphetamine  INVOLVES  Case    2
+methamphetamine  INVOLVES  Case    2      ← 2 vụ không nối được tới khoản luật nào
 ```
 
-Danh sách đầy đủ 16 Substance còn có các cặp đồng nghĩa hoặc chung chung: `MDMA` / `thuốc lắc`, `Cocaine` / `côca`, và các node rác `ma túy`, `chất ma túy`.
+Ngoài ra có `MDMA` / `thuốc lắc` và các node rác `ma túy`, `chất ma túy` (16 Substance).
+
+**Case trên graph hiện tại (vẫn còn):**
 
 ```cypher
-MATCH (p:Person {name:'Dương Minh Tuấn'})-[:INVOLVED_IN]->(k:Case)
-RETURN count(DISTINCT k) AS cases, collect(DISTINCT k.doc_id) AS docs;
+MATCH (p:Person {name:'Dương Minh Tuấn'})-[:INVOLVED_IN]->(k:Case) RETURN count(DISTINCT k), collect(k.name);
 ```
 
 ```
-cases: 4  docs: [news-100260925144412498, news-100260924095400982,
-                 news-100260922111804786, news-100260920221957595]
+4  ['Vụ triệt phá 8 đường dây ma túy tại TP.HCM', 'Vụ sử dụng ma túy etomidate của Hoàng Nato và Phan Kim Nhi',
+    "Vụ bắt giữ TikToker Phannhibeauty và giang hồ 'Hoàng Nato'", "Vụ bắt giang hồ 'Hoàng Nato' và 126 người liên quan"]
 ```
 
-Bốn bài cùng nói về việc bắt "Hoàng Nato", nhưng tạo ra 4 node `Case` khác tên ("Vụ bắt giang hồ 'Hoàng Nato' và 126 người liên quan", "Vụ bắt giữ TikToker Phannhibeauty và giang hồ 'Hoàng Nato'", …).
+- **Nguyên nhân (bước extraction + khóa trong ontology):** `MERGE` so chuỗi chính xác và phân biệt hoa thường. Tên chất do LLM viết không được đưa về danh mục chuẩn. `Case.name` do LLM tự đặt riêng cho từng bài.
+- **Đề xuất sửa:** Substance **đã sửa** bằng `canonical_substance()` (đồng nghĩa + `link_entity` + bỏ tên chung). Sau khi sửa còn 11 Substance, và `Methamphetamine` của 3 vụ nối tới 18 `Threshold`. Với Case, cần khóa sự kiện (người chính + ngày + nơi) hoặc bước gộp hậu kỳ có kiểm tra. Gộp theo "chung ≥ 2 người" bị loại vì sẽ gộp nhầm vụ Viện Pháp y với vụ Sầm Sơn (cùng nhóm Lê Văn Đông, Trần Quốc An, Nguyễn Thị Mai Anh nhưng là hai vụ khác nhau).
 
-- **Nguyên nhân (bước extraction + khóa định danh trong ontology):** `MERGE` so khớp chuỗi chính xác và phân biệt hoa thường. Tên chất từ tin do LLM sinh ra, không được chuẩn hóa về danh mục của luật (`find_substances` chỉ áp dụng cho luật). Vì vậy 2 vụ dùng `methamphetamine` viết thường **không nối** được tới 18 khoản luật `MENTIONS Methamphetamine`. Với Case, khóa là `name` do LLM tự đặt theo từng bài, nên mỗi bài sinh một tên mới. Đây là giới hạn của ontology gợi ý mà `ONTOLOGY.md` mục 2 và 6.4 đã nêu.
-- **Đề xuất sửa:** chạy tên chất qua `link_entity(name, SUBSTANCES, normalize=str.lower)` trước khi `MERGE` (dùng lại KG-1), thêm bảng đồng nghĩa (`thuốc lắc→MDMA`), và bỏ các tên chung như "ma túy". Với Case, hợp nhất theo (người chính + ngày + địa điểm) hoặc thêm bước gộp hậu kỳ: hai Case có chung ≥ 2 Person thì tạo cạnh `SAME_AS` hoặc gộp node.
+### Lỗi E2/E6 (mới, do chính ontology tự thiết kế): lượng trích sai bị phép so sánh số khuếch đại
 
-### Lỗi E4: Phép đo sai, judge quá dễ ở Q5 (Flat)
+- **Hiện tượng:** ở vụ Hoàng Nato, graph "tự suy ra" khoản áp dụng cho Ketamine, nhưng con số 100 g không phải của Ketamine.
+- **Bằng chứng:**
 
-- **Hiện tượng:** ở Q5, Flat có recall 0.60 nhưng judge = 2 (tối đa), bằng điểm GraphRAG (recall 1.00).
-- **Bằng chứng:** `must_include` của Q5 là `['vận chuyển', 'MDMA', 'Điều 250', 'khoản 4', 'tử hình']`. Câu trả lời Flat Q5:
-> … Với khối lượng MDMA hơn 9,6kg trong vụ này, **khoản b của điều luật tương ứng** được áp dụng, và khung hình phạt là từ 20 năm tù, tù chung thân hoặc tử hình.
+```cypher
+MATCH (k:Case {doc_id:'news-100260920221957595'})-[r:INVOLVES]->(s) RETURN s.name, r.amount, r.grams;
+```
 
-Câu này không nêu Điều nào, và "khoản b" là sai: b là **điểm** b thuộc khoản 4, không phải khoản. Câu hỏi hỏi rõ "khoản nào của điều luật". Ngược lại, ở Q6 Flat có recall 0.00 nhưng judge = 1, dù câu trả lời liệt kê "vụ của Đức, Thành, Đông" mà không có tên đầy đủ hay vụ Cái Quang Huy.
-- **Nguyên nhân (bước đánh giá):** LLM-judge chấm theo "ý chung" (khung hình phạt đúng thì cho điểm tối đa), không phạt khi thiếu trích dẫn pháp lý. Keyword recall thì quá cứng: nếu Flat viết "Điều 250" mà không có chữ "khoản 4" vẫn mất điểm. Ở câu này recall phản ánh đúng hơn judge.
-- **Đề xuất sửa:** đưa `must_include` vào prompt của judge và yêu cầu trừ điểm khi thiếu từng mục. Hoặc dùng điểm tổng hợp `min(judge/2, recall)` cho các câu pháp lý cần trích dẫn chính xác.
+```
+MDMA       không rõ      null
+etomidate  không rõ      null
+Ketamine   khoảng 100g   100.0
+```
+
+Bài gốc viết: *"… hơn 1.000 đầu pod chill chứa ma túy etomidate, **khoảng 100g ma túy tổng hợp các loại** …"*. Từ đó `context()` sinh ra dữ kiện: `Theo lượng Ketamine khoảng 100g (≈100 gam) …: áp dụng Điều 251 BLHS khoản 3 điểm e, khung hình phạt: phạt tù từ 15 năm đến 20 năm.`
+- **Nguyên nhân (bước extraction, bị thiết kế ontology khuếch đại):** LLM gán lượng "ma túy tổng hợp các loại" cho một chất cụ thể. Ở ontology gợi ý, lỗi này chỉ nằm im trong chuỗi `amount`. Ở ontology mới, `grams` được so với `Threshold`, nên lỗi biến thành một kết luận pháp lý trông rất chắc chắn. Lượng lại tính theo **vụ** chứ không theo người.
+- **Đề xuất sửa:** yêu cầu LLM trả `evidence` (câu nguồn) cho mỗi lượng, và chỉ điền `grams` khi câu nguồn chứa đúng tên chất. Ghi kèm dữ kiện suy luận "(suy từ lượng do LLM trích, cần đối chiếu nguồn)". Chuyển `INVOLVES` sang `Person→Substance` khi bài nêu lượng riêng từng người.
+
+### Lỗi E4: Phép đo sai — recall không phạt câu trả lời thừa
+
+- **Hiện tượng:** Graph Q6 đạt recall 1.00 / judge 2, nhưng danh sách có 2 vụ ngoài kỳ vọng của benchmark.
+- **Bằng chứng:** `must_include` của Q6 = `['Cái Quang Huy', 'Lê Minh Thành', 'Pháp y tâm thần']`. Câu trả lời Graph Q6 liệt kê thêm *"3. Vụ 'Vụ bắt giang hồ 'Hoàng Nato' …': MDMA không rõ"* và *"5. Vụ 'Vụ tổ chức sử dụng ma túy tại Sầm Sơn': MDMA 0,686g"*. Vụ Hoàng Nato vào danh sách vì bài viết "ketamine, **thuốc lắc**", và quy tắc `thuốc lắc→MDMA` (Substance.aliases = `['thuốc lắc']`) gộp nó vào MDMA. Ngược lại, Flat Q5 có recall 0.60 và judge 1, dù đúng khung hình phạt nhưng sai cách gọi "khoản b".
+- **Nguyên nhân (bước đánh giá):** keyword recall chỉ đo độ phủ, không đo độ chính xác, nên liệt kê thừa không bị trừ điểm. LLM-judge chấm theo ý chung. Vụ Sầm Sơn thật ra có MDMA (0,686g) nên benchmark có thể đang thiếu đáp án.
+- **Đề xuất sửa:** thêm `must_not_include` hoặc chấm precision cho câu aggregation. Đưa `must_include` vào prompt judge. Với ontology: thêm cờ `confirmed` trên `INVOLVES` (giám định xác nhận hay chỉ là từ lóng) để câu hỏi chặt có thể lọc.
 
 ## 4. Kết luận (5 điểm)
 
-> **Nên dùng KG khi** câu hỏi cần **nối hai nguồn không cùng xuất hiện trong một chunk**, như tin tức (người, vụ) nối với luật (Điều, khoản). Ở 3 câu cross-kb, recall Flat chỉ đạt 0.00 / 0.00 / 0.60 (Q3, Q4 trả lời "Không đủ thông tin"), còn Graph đạt 1.00 / 1.00 / 1.00. KG cũng có lợi cho câu **tổng hợp** trên toàn corpus (Q6: 0.67 so với 0.00), vì graph quét toàn bộ cạnh thay vì chỉ top-3. Trung bình 6 câu: recall 0.43 → 0.94, judge 1.17 → 1.83.
+> **Nên dùng KG khi** câu hỏi cần **nối hai nguồn không cùng xuất hiện trong một chunk**, như tin tức (người, vụ, lượng) với luật (Điều, khoản, ngưỡng). Ở 3 câu cross-kb, recall Flat là 0.00 / 0.00 / 0.60, Graph là 1.00 / 1.00 / 1.00. Ở câu tổng hợp Q6, recall là 0.00 so với 1.00. Trung bình 6 câu: recall 0.43 → 1.00, judge 1.00 → 2.00. KG càng đáng tiền khi ontology mô hình hóa đúng cái câu hỏi cần **tính toán**: thêm `Threshold` làm Q5 trả lời được bằng phép so sánh số, và còn rẻ hơn ontology gợi ý (0.00106 → 0.00094 USD / câu).
 >
-> **Flat RAG là đủ khi** câu hỏi single-hop và đáp án nằm gọn trong một đoạn (Q1, Q2: hai bên đều 1.00 / 2). Khi đó graph chỉ tốn thêm ×8.2 USD, ×1.6 thời gian, ×9.8 token mỗi câu và ×8.6 USD indexing mà không tăng điểm.
+> **Flat RAG là đủ khi** câu hỏi single-hop có đáp án nằm gọn trong một đoạn (Q1, Q2: cả hai đều 1.00 / 2). Khi đó graph chỉ tốn thêm ×7.2 USD, ×1.8 thời gian / câu và ×8.6 USD indexing mà không thêm điểm.
 >
-> **Điều kiện cụ thể:** dữ liệu có thực thể lặp lại giữa các nguồn (tội danh, chất) và có cấu trúc (luật chia Điều/khoản, regex parse được); tỉ lệ câu multi-hop/aggregation đáng kể (ở đây 4/6); và chất lượng quan trọng hơn ~$0.94 cho 1 000 câu. Nếu phần lớn câu hỏi là tra cứu một đoạn, hoặc không có ngân sách để làm sạch thực thể (E3 cho thấy graph tự động vẫn trùng node), thì nên dùng Flat RAG, hoặc định tuyến: chỉ gọi graph khi câu hỏi nhắc người/vụ **và** hỏi về luật.
+> **Điều kiện cụ thể:** (1) dữ liệu có thực thể lặp lại giữa các nguồn (tội danh, chất) và một nguồn có cấu trúc parse được bằng regex (luật); (2) tỉ lệ câu multi-hop / tổng hợp đáng kể (ở đây 4/6); (3) chấp nhận ~$0.82 / 1 000 câu và có người rà lỗi trích xuất, vì E2/E6 cho thấy graph có thể biến một lỗi LLM thành kết luận pháp lý sai trông rất chắc chắn. Nếu phần lớn câu hỏi là tra cứu một đoạn, dùng Flat, hoặc định tuyến: chỉ gọi graph khi câu hỏi vừa nhắc người/vụ vừa hỏi về luật hoặc hỏi "những vụ nào".
 
 ## 5. Tự kiểm (5 điểm)
 
 ```
 $ pytest tests/ -q
 ................................................                         [100%]
-48 passed in 0.06s
+48 passed in 0.07s
 
 $ python bench_kg.py --check
 [OK] Dữ liệu: 18 điều luật, 20 bài báo
 [OK] KG-1 link_entity
 [OK] Neo4j kết nối được
 [provider] chat = openai:gpt-4o-mini | embedding = openai:text-embedding-3-small
-[OK] KG-2 build_graph: 146 node / 289 cạnh, đường xuyên 2 KB dài 1 cạnh
+[OK] KG-2 build_graph: 263 node / 459 cạnh, đường xuyên 2 KB dài 1 cạnh
 [OK] KG-3 context: 19 dữ kiện, có Điều 251
 [OK] KG-4 GraphRAGAgent.answer
-[OK] Chi phí check: 1 lần gọi LLM, $0.00066. Graph nhỏ (luật + 1 bài) vẫn còn trong Neo4j để bạn xem; chạy --judge để dựng graph đầy đủ.
+[OK] Chi phí check: 1 lần gọi LLM, $0.00065. Graph nhỏ (luật + 1 bài) vẫn còn trong Neo4j để bạn xem; chạy --judge để dựng graph đầy đủ.
 ```
 
-Sau đó chạy `python bench_kg.py --judge` trên code cuối để sinh lại `ket_qua_benchmark_kg.txt` (207 nodes / 383 rels). Các Cypher ở mục 3 chạy trên graph này. Kiểm tra các label và quan hệ đang có (khớp `ONTOLOGY.md`):
-
-```
-Labels: Clause 99, Person 40, Article 18, Substance 16, Case 14, Crime 13, Location 7
-Rels:   MENTIONS 169, HAS_CLAUSE 99, INVOLVED_IN 48, INVOLVES 22, CHARGED_WITH 18, LOCATED_IN 14, DEFINES 13
-```
+Sau đó chạy `python bench_kg.py --judge` trên code cuối để sinh `ket_qua_benchmark_kg.txt` (319 nodes / 549 rels). Các Cypher của graph hiện tại ở mục 3 và ảnh đều chạy trên graph này. Label / quan hệ thật: `Threshold 117, Clause 99, Person 40, Article 18, Case 14, Crime 13, Substance 11, Location 7`; `FOR_SUBSTANCE 222, HAS_THRESHOLD 117, HAS_CLAUSE 99, INVOLVED_IN 48, CHARGED_WITH 18, INVOLVES 18, LOCATED_IN 14, DEFINES 13`, khớp `ONTOLOGY.md`.
 
 Ảnh Neo4j: `report/img/kg_count.png`, `report/img/kg_cross_kb.png`, `report/img/kg_my_case.png`.
-Người đã chọn cho `kg_my_case.png`: **Cái Quang Huy** (Person → Case "Vụ vận chuyển ma túy từ Đức về Việt Nam" → Crime "vận chuyển trái phép chất ma túy" ← Điều 250).
+Người đã chọn cho `kg_my_case.png`: **Cái Quang Huy**. Đường đi theo ontology của mình: Person → Case → Crime "vận chuyển trái phép chất ma túy" ← Điều 250 → khoản 4 → `Threshold` điểm b (MDMA ≥ 100 g) → MDMA ← Case (`grams` = 9600).
 
 ## Vấn đề gặp phải (không tính điểm)
 
-> Ba ảnh được chụp từ lần dựng graph đầy đủ trước lần `--judge` cuối, nên `kg_count.png` ghi Person = 39, còn graph hiện tại có 40, vì mỗi lần chạy LLM trích xuất hơi khác nhau. Các label và quan hệ vẫn như cũ. Trên Windows, cần đặt `PYTHONIOENCODING=utf-8` để in tiếng Việt ra console.
+> Trên Windows, cần đặt `PYTHONIOENCODING=utf-8` để in tiếng Việt ra console. LLM trích xuất mỗi lần chạy hơi khác nhau, nên số Person / Case dao động ±1 giữa các lần dựng graph. Mọi số trong báo cáo lấy từ lần `--judge` cuối.

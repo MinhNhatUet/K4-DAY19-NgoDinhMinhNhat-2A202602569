@@ -1,0 +1,181 @@
+{
+  "labels": {
+    "cypher": "MATCH (n) RETURN labels(n)[0] AS label, count(*) AS n ORDER BY n DESC",
+    "rows": [
+      {
+        "label": "Threshold",
+        "n": 117
+      },
+      {
+        "label": "Clause",
+        "n": 99
+      },
+      {
+        "label": "Person",
+        "n": 40
+      },
+      {
+        "label": "Article",
+        "n": 18
+      },
+      {
+        "label": "Case",
+        "n": 14
+      },
+      {
+        "label": "Crime",
+        "n": 13
+      },
+      {
+        "label": "Substance",
+        "n": 11
+      },
+      {
+        "label": "Location",
+        "n": 7
+      }
+    ]
+  },
+  "rels": {
+    "cypher": "MATCH ()-[r]->() RETURN type(r) AS rel, count(*) AS n ORDER BY n DESC",
+    "rows": [
+      {
+        "rel": "FOR_SUBSTANCE",
+        "n": 222
+      },
+      {
+        "rel": "HAS_THRESHOLD",
+        "n": 117
+      },
+      {
+        "rel": "HAS_CLAUSE",
+        "n": 99
+      },
+      {
+        "rel": "INVOLVED_IN",
+        "n": 48
+      },
+      {
+        "rel": "CHARGED_WITH",
+        "n": 18
+      },
+      {
+        "rel": "INVOLVES",
+        "n": 18
+      },
+      {
+        "rel": "LOCATED_IN",
+        "n": 14
+      },
+      {
+        "rel": "DEFINES",
+        "n": 13
+      }
+    ]
+  },
+  "substances": {
+    "cypher": "MATCH (s:Substance) RETURN s.name AS name, s.aliases AS aliases ORDER BY toLower(s.name)",
+    "rows": [
+      {
+        "name": "Amphetamine",
+        "aliases": []
+      },
+      {
+        "name": "Cocaine",
+        "aliases": []
+      },
+      {
+        "name": "côca",
+        "aliases": []
+      },
+      {
+        "name": "cần sa",
+        "aliases": []
+      },
+      {
+        "name": "etomidate",
+        "aliases": []
+      },
+      {
+        "name": "Heroine",
+        "aliases": []
+      },
+      {
+        "name": "Ketamine",
+        "aliases": []
+      },
+      {
+        "name": "MDMA",
+        "aliases": [
+          "thuốc lắc"
+        ]
+      },
+      {
+        "name": "Methamphetamine",
+        "aliases": []
+      },
+      {
+        "name": "thuốc phiện",
+        "aliases": []
+      },
+      {
+        "name": "XLR-11",
+        "aliases": []
+      }
+    ]
+  },
+  "q5_clause_by_threshold": {
+    "cypher": "MATCH (p:Person {name:'Cái Quang Huy'})-[:INVOLVED_IN]->(k:Case)-[v:INVOLVES]->(s:Substance {name:'MDMA'}) MATCH (k)-[:CHARGED_WITH]->(:Crime)<-[:DEFINES]-(a:Article)-[:HAS_CLAUSE]->(cl:Clause) -[:HAS_THRESHOLD]->(t:Threshold)-[:FOR_SUBSTANCE]->(s) WHERE v.grams >= t.min_qty AND (t.max_qty IS NULL OR v.grams < t.max_qty) RETURN v.amount AS amount, v.grams AS grams, a.id AS article, cl.number AS clause, t.point AS point, t.min_qty AS min_g, t.max_qty AS max_g, cl.penalty AS penalty",
+    "rows": [
+      {
+        "amount": "9.6kg",
+        "grams": 9600.0,
+        "article": "Điều 250 BLHS",
+        "clause": 4,
+        "point": "b",
+        "min_g": 100.0,
+        "max_g": null,
+        "penalty": "phạt tù 20 năm, tù chung thân hoặc tử hình"
+      }
+    ]
+  },
+  "methamphetamine_to_law": {
+    "cypher": "MATCH (k:Case)-[:INVOLVES]->(s:Substance {name:'Methamphetamine'})<-[:FOR_SUBSTANCE]-(t:Threshold) RETURN count(DISTINCT k) AS cases, count(DISTINCT t) AS thresholds",
+    "rows": [
+      {
+        "cases": 3,
+        "thresholds": 18
+      }
+    ]
+  },
+  "q6_mdma_cases": {
+    "cypher": "MATCH (k:Case)-[r:INVOLVES]->(:Substance {name:'MDMA'}) RETURN k.name AS case, k.doc_id AS doc_id, r.amount AS amount ORDER BY doc_id",
+    "rows": [
+      {
+        "case": "Vụ vận chuyển ma túy từ Đức về Việt Nam",
+        "doc_id": "news-100260917203001265",
+        "amount": "9.6kg"
+      },
+      {
+        "case": "Vụ góp tiền mua ma túy tại Hà Nội",
+        "doc_id": "news-100260918080821054",
+        "amount": "5 viên"
+      },
+      {
+        "case": "Vụ bắt giang hồ 'Hoàng Nato' và 126 người liên quan",
+        "doc_id": "news-100260920221957595",
+        "amount": "không rõ"
+      },
+      {
+        "case": "Vụ án tại Viện Pháp y tâm thần Trung ương",
+        "doc_id": "news-100260924105118645",
+        "amount": ""
+      },
+      {
+        "case": "Vụ tổ chức sử dụng ma túy tại Sầm Sơn",
+        "doc_id": "news-100260930085028036",
+        "amount": "0,686g"
+      }
+    ]
+  }
+}

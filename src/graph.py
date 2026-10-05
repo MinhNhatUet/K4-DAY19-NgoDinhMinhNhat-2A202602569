@@ -10,12 +10,15 @@ Contract (fixed — bench_kg.py and the tests rely on it):
 Everything else in this file is a HINT: one possible ontology (below). Use it as is, change it,
 or design your own — your own ontology + report/ONTOLOGY.md earns the bonus (see SUBMISSION.md).
 
-Suggested ontology (Crime is the bridge between the law KB and the news KB):
+Ontology used here (own design, see report/ONTOLOGY.md). Crime is the bridge between the two KBs;
+quantity thresholds are first-class nodes so the applicable clause can be chosen by comparing numbers:
 
     (:Article {id, title, law, doc_id})-[:DEFINES]->(:Crime {name})
-    (:Article)-[:HAS_CLAUSE]->(:Clause {id, number, penalty, text})-[:MENTIONS]->(:Substance {name})
+    (:Article)-[:HAS_CLAUSE]->(:Clause {id, number, penalty, text})
+    (:Clause)-[:HAS_THRESHOLD]->(:Threshold {id, point, text, scope, unit, min_qty, max_qty})
+    (:Threshold)-[:FOR_SUBSTANCE]->(:Substance {name, aliases})       # canonical name, synonyms in aliases
     (:Case {name, summary, date, doc_id})-[:CHARGED_WITH]->(:Crime)
-    (:Case)-[:INVOLVES {amount}]->(:Substance)
+    (:Case)-[:INVOLVES {amount, grams}]->(:Substance)
     (:Case)-[:LOCATED_IN]->(:Location {name})
     (:Person {name, aliases})-[:INVOLVED_IN {role, sentence, charge}]->(:Case)
 """
@@ -34,7 +37,17 @@ from .store import EmbeddingStore
 # Canonical substance names: the ones BLHS Chương XX lists, plus common ones in Vietnamese news.
 SUBSTANCES = ["Heroine", "Cocaine", "Methamphetamine", "Amphetamine", "MDMA", "XLR-11", "Ketamine",
               "cần sa", "thuốc phiện", "côca"]
+# News wording -> canonical name; generic words are not a substance.
+SUBSTANCE_SYNONYMS = {"thuốc lắc": "MDMA", "ma túy đá": "Methamphetamine", "ma tuý đá": "Methamphetamine",
+                      "heroin": "Heroine", "cocain": "Cocaine", "coca": "côca"}
+GENERIC_SUBSTANCES = {"ma túy", "ma tuý", "chất ma túy", "chất ma tuý", "ma túy tổng hợp", "ma tuý tổng hợp"}
 CLAUSE_START = re.compile(r"^(\d+)\.\s", re.MULTILINE)
+POINT_START = re.compile(r"^([a-zđ])\)\s", re.MULTILINE)
+QTY = r"(\d+(?:,\d+)?) (gam|kilôgam|mililít|cây)"
+RANGE = re.compile(rf"t[ừù] {QTY} đến dưới {QTY}")
+AT_LEAST = re.compile(rf"{QTY} trở lên")
+UNITS = {"gam": ("g", 1), "kilôgam": ("g", 1000), "mililít": ("ml", 1), "cây": ("cây", 1)}
+AMOUNT = re.compile(r"(\d+(?:[.,]\d+)?)\s*(kilôgam|kilogam|kg|gam|gram|g)(?!\w)", re.IGNORECASE)
 FOOTNOTE = re.compile(r"\[\d+\]")
 
 def load_markdown_docs(folder: str | Path) -> list[Document]:
@@ -68,8 +81,59 @@ def link_entity(name: str, known: list[str], normalize: Callable[[str], str] = n
     return canonical[matches[0]] if matches else None
 
 def find_substances(text: str) -> list[str]:
-    lowered = text.lower()
-    return [name for name in SUBSTANCES if name.lower() in lowered]
+    # Word boundaries: "Amphetamine" must not match inside "Methamphetamine".
+    return [name for name in SUBSTANCES if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text, re.IGNORECASE)]
+
+def canonical_substance(name: str) -> str | None:
+    """'thuốc lắc' -> 'MDMA', 'ketamine' -> 'Ketamine', 'ma túy' -> None, unknown -> lower-cased name."""
+    key = re.sub(r"\s+", " ", name.strip().lower())
+    if not key or key in GENERIC_SUBSTANCES:
+        return None
+    key = SUBSTANCE_SYNONYMS.get(key, key)
+    return link_entity(key, SUBSTANCES, normalize=str.lower) or key
+
+def _qty(number: str, unit: str) -> tuple[float, str]:
+    unit_name, factor = UNITS[unit]
+    return float(number.replace(",", ".")) * factor, unit_name
+
+def parse_threshold(text: str) -> dict | None:
+    """'... MDMA có khối lượng từ 05 gam đến dưới 30 gam' -> {min_qty: 5, max_qty: 30, unit: 'g'}."""
+    if m := RANGE.search(text):
+        (low, unit), (high, _) = _qty(*m.group(1, 2)), _qty(*m.group(3, 4))
+        return {"min_qty": low, "max_qty": high, "unit": unit}
+    if m := AT_LEAST.search(text):
+        low, unit = _qty(*m.group(1, 2))
+        return {"min_qty": low, "max_qty": None, "unit": unit}
+    return None
+
+def amount_to_grams(amount: str) -> float | None:
+    """'hơn 9,6kg' -> 9600.0, '0,686g' -> 0.686, '5 viên' -> None.
+    ponytail: ',' and '.' both read as decimal mark; '1.200g' (thousands) would parse as 1.2 g."""
+    m = AMOUNT.search(amount or "")
+    if not m:
+        return None
+    grams = float(m.group(1).replace(",", "."))
+    return grams * 1000 if m.group(2).lower() in ("kg", "kilôgam", "kilogam") else grams
+
+def parse_points(clause_id: str, text: str) -> list[dict]:
+    """One Threshold per lettered point that states a quantity of named or 'other' substances."""
+    starts = list(POINT_START.finditer(text))
+    points = []
+    for index, start in enumerate(starts):
+        end = starts[index + 1].start() if index + 1 < len(starts) else len(text)
+        point_text = text[start.start():end].strip()
+        threshold = parse_threshold(point_text)
+        if not threshold or "chất ma túy trở lên" in point_text:   # "02 chất trở lên" mixtures: not modelled
+            continue
+        lowered = point_text.lower()
+        scope = ("other_solid" if "chất ma túy khác ở thể rắn" in lowered
+                 else "other_liquid" if "chất ma túy khác ở thể lỏng" in lowered else "listed")
+        substances = find_substances(point_text) if scope == "listed" else []
+        if scope == "listed" and not substances:
+            continue
+        points.append({"id": f"{clause_id} điểm {start.group(1)}", "point": start.group(1),
+                       "text": point_text, "scope": scope, "substances": substances, **threshold})
+    return points
 
 # ----------------------------------------------------------------------------------------------
 # HINT — suggested ontology: extraction helpers
@@ -92,7 +156,7 @@ def parse_law_article(doc: Document) -> dict[str, Any]:
             "number": int(start.group(1)),
             "penalty": penalty.group(1).rstrip(".") if penalty else "",
             "text": text,
-            "substances": find_substances(text),
+            "thresholds": parse_points(f"{article_id} khoản {start.group(1)}", text),
         })
     return {
         "id": article_id,
@@ -142,6 +206,14 @@ def extract_news_cases(doc: Document, llm_fn: Callable[[str], str], known_crimes
         case["charges"] = sorted({c for c in (link_entity(x, known_crimes) for x in case.get("charges", [])) if c})
         for person in case.get("people", []):
             person["charge"] = link_entity(person.get("charge") or "", known_crimes) or ""
+        substances = {}
+        for item in case.get("substances", []):
+            name = canonical_substance(item.get("name") or "")
+            if name and name not in substances:
+                amount = item.get("amount") or ""
+                substances[name] = {"name": name, "alias": item["name"].strip(), "amount": amount,
+                                    "grams": amount_to_grams(amount)}
+        case["substances"] = list(substances.values())
     return cases
 
 # ----------------------------------------------------------------------------------------------
@@ -215,7 +287,7 @@ class Neo4jGraph:
     # ---------------------------------------------------------------- HINT — suggested ontology: writes
 
     def suggested_constraints(self) -> None:
-        for label, key in [("Article", "id"), ("Clause", "id"), ("Crime", "name"), ("Case", "name"),
+        for label, key in [("Article", "id"), ("Clause", "id"), ("Threshold", "id"), ("Crime", "name"), ("Case", "name"),
                            ("Substance", "name"), ("Person", "name"), ("Location", "name")]:
             self.run(f"CREATE CONSTRAINT IF NOT EXISTS FOR (n:{label}) REQUIRE n.{key} IS UNIQUE")
 
@@ -231,9 +303,14 @@ class Neo4jGraph:
             MERGE (cl:Clause {id: clause.id})
               SET cl.number = clause.number, cl.penalty = clause.penalty, cl.text = clause.text, cl.doc_id = $doc_id
             MERGE (a)-[:HAS_CLAUSE]->(cl)
-            FOREACH (s IN clause.substances | MERGE (sub:Substance {name: s})
-                ON CREATE SET sub.doc_id = $doc_id
-                MERGE (cl)-[:MENTIONS]->(sub))
+            FOREACH (t IN clause.thresholds |
+                MERGE (th:Threshold {id: t.id})
+                  SET th.point = t.point, th.text = t.text, th.scope = t.scope, th.unit = t.unit,
+                      th.min_qty = t.min_qty, th.max_qty = t.max_qty, th.doc_id = $doc_id
+                MERGE (cl)-[:HAS_THRESHOLD]->(th)
+                FOREACH (s IN t.substances | MERGE (sub:Substance {name: s})
+                    ON CREATE SET sub.doc_id = $doc_id, sub.aliases = []
+                    MERGE (th)-[:FOR_SUBSTANCE]->(sub)))
             """,
             **article,
         )
@@ -250,9 +327,11 @@ class Neo4jGraph:
                 ON CREATE SET c.doc_id = $doc_id
                 MERGE (k)-[:CHARGED_WITH]->(c))
             FOREACH (s IN $substances | MERGE (sub:Substance {name: s.name})
-                ON CREATE SET sub.doc_id = $doc_id
+                ON CREATE SET sub.doc_id = $doc_id, sub.aliases = []
+                SET sub.aliases = CASE WHEN toLower(s.alias) = toLower(sub.name) OR s.alias IN sub.aliases
+                                       THEN sub.aliases ELSE sub.aliases + s.alias END
                 MERGE (k)-[r:INVOLVES]->(sub)
-                SET r.amount = s.amount)
+                SET r.amount = s.amount, r.grams = s.grams)
             FOREACH (p IN $people | MERGE (person:Person {name: p.name})
                 ON CREATE SET person.doc_id = $doc_id
                 SET person.aliases = coalesce(p.aliases, [])
@@ -320,16 +399,55 @@ class Neo4jGraph:
         )
         facts.extend(f"Vụ '{r['name']}' liên quan {r['substance']}: {r['amount'] or 'chưa rõ lượng'}."
                      for r in amounts)
+        if aggregation:
+            # One numbered line per case, no law text drowning it (E5): the answer is the set of cases.
+            rows = self.run(
+                """
+                MATCH (k:Case) WHERE elementId(k) IN $ids
+                OPTIONAL MATCH (p:Person)-[:INVOLVED_IN]->(k)
+                WITH k, collect(DISTINCT p.name) AS people
+                OPTIONAL MATCH (k)-[v:INVOLVES]->(s:Substance) WHERE s.name IN $substances
+                RETURN k.name AS name, k.doc_id AS doc_id, k.summary AS summary, people,
+                       collect(s.name + ' ' + coalesce(nullif(v.amount, ''), 'chưa rõ lượng')) AS amounts
+                ORDER BY k.doc_id
+                """, ids=case_ids, substances=substances,
+            )
+            listing = [f"Truy vấn graph tìm được đúng {len(rows)} vụ việc; câu trả lời phải liệt kê đủ cả {len(rows)} vụ:"]
+            listing += [f"{i}. Vụ '{r['name']}' [{r['doc_id']}]: {', '.join(r['amounts'])}; người liên quan: "
+                        f"{', '.join(r['people']) or 'chưa rõ'}. {r['summary']}" for i, r in enumerate(rows, start=1)]
+            return listing[:max_facts]
+        # Numeric threshold match: case amount (grams) against Threshold nodes of the charged crime's Article.
+        matched = self.run(
+            """
+            MATCH (k:Case)-[v:INVOLVES]->(s:Substance)
+            WHERE elementId(k) IN $ids AND v.grams IS NOT NULL
+            MATCH (k)-[:CHARGED_WITH]->(:Crime)<-[:DEFINES]-(a:Article)-[:HAS_CLAUSE]->(cl:Clause)
+                  -[:HAS_THRESHOLD]->(t:Threshold {unit: 'g'})
+            WHERE v.grams >= t.min_qty AND (t.max_qty IS NULL OR v.grams < t.max_qty)
+              AND (EXISTS { (t)-[:FOR_SUBSTANCE]->(s) }
+                   OR (t.scope = 'other_solid' AND NOT EXISTS {
+                       MATCH (a)-[:HAS_CLAUSE]->()-[:HAS_THRESHOLD]->()-[:FOR_SUBSTANCE]->(s) }))
+            RETURN k.name AS name, s.name AS substance, v.amount AS amount, v.grams AS grams,
+                   a.id AS article, cl.id AS clause_id, cl.number AS number, t.point AS point, cl.penalty AS penalty
+            ORDER BY name, article, number
+            """, ids=case_ids,
+        )
+        facts.extend(
+            f"Theo lượng {r['substance']} {r['amount']} (≈{r['grams']:g} gam) trong vụ '{r['name']}': áp dụng "
+            f"{r['article']} khoản {r['number']} điểm {r['point']}, khung hình phạt: {r['penalty'] or 'xem văn bản khoản'}."
+            for r in matched
+        )
         clauses = self.run(
             """
             MATCH (k:Case)-[:CHARGED_WITH]->(c:Crime)<-[:DEFINES]-(a:Article)
                   -[:HAS_CLAUSE]->(cl:Clause)
-            WHERE elementId(k) IN $ids AND ($all_clauses OR cl.number = 1 OR EXISTS {
-                MATCH (k)-[:INVOLVES]->(:Substance)<-[:MENTIONS]-(cl)
+            WHERE elementId(k) IN $ids AND ($all_clauses OR cl.number = 1 OR cl.id IN $matched OR EXISTS {
+                MATCH (k)-[v:INVOLVES]->(:Substance)<-[:FOR_SUBSTANCE]-(:Threshold)<-[:HAS_THRESHOLD]-(cl)
+                WHERE v.grams IS NULL
             })
             RETURN DISTINCT a.id AS article, a.title AS title, cl.number AS number, cl.text AS text
             ORDER BY article, number
-            """, ids=case_ids, all_clauses=all_clauses,
+            """, ids=case_ids, all_clauses=all_clauses, matched=[r["clause_id"] for r in matched],
         )
         # Law-only questions also need clause text: seed_facts only serializes edges.
         clauses += self.run(
@@ -338,7 +456,8 @@ class Neo4jGraph:
             WHERE (elementId(a) IN $ids OR elementId(cl) IN $ids OR a.doc_id IN $doc_ids
                    OR any(n IN $numbers WHERE a.id STARTS WITH ('Điều ' + n + ' ')))
               AND ($all_clauses OR $definition OR cl.number = 1 OR EXISTS {
-                  MATCH (cl)-[:MENTIONS]->(s:Substance) WHERE s.name IN $substances
+                  MATCH (cl)-[:HAS_THRESHOLD]->(:Threshold)-[:FOR_SUBSTANCE]->(s:Substance)
+                  WHERE s.name IN $substances
               })
             RETURN DISTINCT a.id AS article, a.title AS title, cl.number AS number, cl.text AS text
             ORDER BY article, number
@@ -347,7 +466,7 @@ class Neo4jGraph:
         )
         law_facts = [f"[{r['article']} - {r['title']}] khoản {r['number']}: {r['text']}" for r in clauses]
         # Preserve legal context before generic one-hop edges consume the fact budget.
-        ordered = facts + law_facts if aggregation else law_facts + facts
+        ordered = law_facts + facts
         unique = list(dict.fromkeys(ordered + seed_facts))
         if len(unique) > max_facts:
             return unique[:max_facts - 1] + ["Ngữ cảnh graph đã bị giới hạn; danh sách dữ kiện có thể chưa đầy đủ."]
@@ -371,7 +490,8 @@ def build_graph(graph: Neo4jGraph, law_docs: list[Document], news_docs: list[Doc
 # ---------------------------------------------------------------------------------------------- KG-4
 
 GRAPH_PROMPT = """Trả lời câu hỏi chỉ dựa trên ngữ cảnh (đoạn văn bản và dữ kiện từ knowledge graph).
-Nêu rõ số Điều luật khi có. Nếu ngữ cảnh không đủ, nói không đủ thông tin.
+Nêu rõ số Điều luật và khoản khi có. Nếu dữ kiện graph có danh sách vụ việc, liệt kê đủ mọi vụ trong danh sách.
+Nếu ngữ cảnh không đủ, nói không đủ thông tin.
 
 Dữ kiện knowledge graph:
 {facts}
