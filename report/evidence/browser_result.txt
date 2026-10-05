@@ -1,0 +1,49 @@
+Query
+connection status: connected
+Instance:
+neo4j://localhost:7687
+. Click to open instance menu
+Database:
+neo4j
+. Click to open database menu
+User:
+neo4j
+. Click to open database user menu
+Connect your instance to Aura console for more tools and features
+Queries
+No queries
+Queries will be automatically saved once you start writing in the tab editor
+Create new query
+Stream
+$
+
+
+Run
+$
+:welcome
+Run
+Do more with Community Edition
+Connect in Aura for free access to:
+Rich graph exploration and dashboards
+Cloud storage for your queries
+Data import tooling
+AI copilots
+
+GUIDE
+
+Get to know the latest in Query/Browser
+Take a quick tour to learn about the latest features to help you be productive.
+
+DATASET
+
+Try Neo4j with the Movie Graph
+Dive into a fully-built graph example to kickstart your Neo4j journey. Discover key query patterns through a fun, familiar world of actors and films.
+Share your feedback
+Help us improve Browser/Query! Let us know what's working well and what could be better.
+Send feedback
+$
+:connect
+Run
+Connected to neo4j://localhost:7687
+INPUTS
+[{'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': 'connection status: connected\nInstance:\nneo4j://localhost:7687\n. Click to open instance menu', 'aria': None}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': 'Database:\nneo4j\n. Click to open database menu', 'aria': None}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': 'User:\nneo4j\n. Click to open database user menu', 'aria': None}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': 'Connect your instance to Aura console for more tools and features', 'aria': None}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': '', 'aria': None}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': '', 'aria': None}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': '', 'aria': 'Database overview'}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': '', 'aria': 'Queries'}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': '', 'aria': 'History'}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': '', 'aria': 'Cypher reference'}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': '', 'aria': 'Parameters'}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': '', 'aria': 'Settings'}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': '', 'aria': 'Create new folder'}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': '', 'aria': 'Download all'}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': '', 'aria': 'Upload'}, {'tag': 'INPUT', 'type': 'file', 'placeholder': '', 'text': '', 'aria': None}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': 'Create new query', 'aria': None}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': '', 'aria': None}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': 'Stream', 'aria': None}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': '', 'aria': 'Add new tab'}, {'tag': 'DIV', 'type': None, 'placeholder': None, 'text': '\n', 'aria': 'Cypher Editor'}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': '', 'aria': 'More options'}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': 'Run', 'aria': None}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': '$\n:welcome', 'aria': None}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': '', 'aria': 'More options'}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': 'Run', 'aria': None}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': '', 'aria': 'Remove frame'}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': 'Do more with Community Edition\nConnect in Aura for free access to:\nRich graph exploration and dashboards\nCloud storage for your queries\nData import tooling\nAI copilots', 'aria': None}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': 'GUIDE\n\nGet to know the latest in Query/Browser\nTake a quick tour to learn about the latest features to help you be productive.', 'aria': None}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': 'DATASET\n\nTry Neo4j with the Movie Graph\nDive into a fully-built graph example to kickstart your Neo4j journey. Discover key query patterns through a fun, familiar world of actors and films.', 'aria': None}, {'tag': 'BUTTON', 'type': 'submit', 'placeholder': None, 'text': '$\n:connect', 'aria': None}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': '', 'aria': 'More options'}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': 'Run', 'aria': None}, {'tag': 'BUTTON', 'type': 'button', 'placeholder': None, 'text': '', 'aria': 'Remove frame'}]
