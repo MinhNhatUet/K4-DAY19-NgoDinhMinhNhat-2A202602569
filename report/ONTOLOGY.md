@@ -1,6 +1,6 @@
 # Thiết kế Ontology — Day 19
 
-**Họ tên:** Ngô Đình Minh Nhật  **MSSV:** 2A202602569
+**Họ tên:** Ngô Đinh Minh Nhật  **MSSV:** 2A202602569
 
 **Lựa chọn:**
 
